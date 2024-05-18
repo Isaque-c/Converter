@@ -1,0 +1,64 @@
+import os
+from flask import Flask, request, send_file
+import pandas as pd
+
+app = Flask(__name__)
+UPLOAD_FOLDER = './uploads'
+OUTPUT_FOLDER = './output'
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+if not os.path.exists(OUTPUT_FOLDER):
+    os.makedirs(OUTPUT_FOLDER)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
+
+@app.route('/')
+def upload_form():
+    return '''
+    <!doctype html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Upload .rpt File</title>
+    </head>
+    <body>
+        <h1>Upload .rpt File to Convert to .csv</h1>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".rpt">
+            <input type="submit" value="Upload and Convert">
+        </form>
+    </body>
+    </html>
+    '''
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return 'No file part'
+    file = request.files['file']
+    if file.filename == '':
+        return 'No selected file'
+    if file:
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        file.save(file_path)
+        csv_file_path = convert_rpt_to_csv(file_path)
+        return send_file(csv_file_path, as_attachment=True)
+
+def convert_rpt_to_csv(file_path):
+    output_file_path = os.path.join(app.config['OUTPUT_FOLDER'], os.path.splitext(os.path.basename(file_path))[0] + '.csv')
+    try:
+        with open(file_path, 'r') as file:
+            data = file.readlines()
+        df = pd.DataFrame([x.strip().split() for x in data])
+        df.to_csv(output_file_path, index=False)
+        return output_file_path
+    except Exception as e:
+        return str(e)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
